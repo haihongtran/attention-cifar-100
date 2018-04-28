@@ -1,0 +1,9 @@
+# Trained model
+*.pkl
+
+# Text file
+*.txt
+
+# Data directory
+data
+
