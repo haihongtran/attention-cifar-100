@@ -12,6 +12,9 @@ import os
 
 from models import *
 
+# TODO: make main function
+# TODO: create argument list with argparser
+
 # Loading data
 mean_cifar_100 = (0.5071, 0.4865, 0.4409)
 std_cifar_100 = (0.2673, 0.2564, 0.2762)
@@ -36,32 +39,31 @@ val_set = torchvision.datasets.CIFAR100(root='./data', train=False,
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
                                          shuffle=False, num_workers=4)
 
-# Define resnet for CIFAR-100
-resnet = resnet50(num_classes = 100)
+# Define model for CIFAR-100
+model = resnet50_ca(num_classes = 100)
+
+# Get number of parameters
+print 'Number of parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 # Decide to use GPUs or not
 use_cuda = torch.cuda.is_available()
 if use_cuda:
     if torch.cuda.device_count() > 1:
         print "Using %d GPUs" % torch.cuda.device_count()
-        resnet = nn.DataParallel(resnet)
-    resnet.cuda()
+        model = nn.DataParallel(model)
+    model.cuda()
     loss_func = nn.CrossEntropyLoss().cuda()    # Loss function
 else:
     loss_func = nn.CrossEntropyLoss()
 
 init_lr = 0.1
-optimizer = optim.SGD(resnet.parameters(), lr = init_lr, momentum = 0.9, weight_decay = 5e-4)
+optimizer = optim.SGD(model.parameters(), lr = init_lr, momentum = 0.9, weight_decay = 5e-4)
 
 # Training parameters
 num_epochs = 200
 
-# Start training
-num_epoch_decay_start = 80
-num_epoch_decay_every = 10
-
 def adjust_learning_rate(optimizer, lr):
-    lr_tmp = lr * 0.2
+    lr_tmp = lr * 0.1
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr_tmp
     return lr_tmp
@@ -78,7 +80,7 @@ best_val_acc = -1
 
 for epoch in range(num_epochs): # From 0 to num_epochs-1
     # Training
-    resnet.train()
+    model.train()
     # Adjust learning rate
     if epoch in [60, 120, 160]:
         lr_curr = adjust_learning_rate(optimizer, lr_curr)
@@ -94,7 +96,7 @@ for epoch in range(num_epochs): # From 0 to num_epochs-1
         # Zero out the gradients of network parameters
         optimizer.zero_grad()
         # Forward pass
-        outputs = resnet(images)
+        outputs = model(images)
         # Loss function
         loss = loss_func(outputs, labels)
         train_running_loss += loss.data[0]
@@ -109,7 +111,7 @@ for epoch in range(num_epochs): # From 0 to num_epochs-1
     epoch_train_loss_sum += [train_running_loss]
 
     # Validating
-    resnet.eval()
+    model.eval()
     correct, total = 0, 0
     test_running_loss = 0
     for data in val_loader:
@@ -119,7 +121,7 @@ for epoch in range(num_epochs): # From 0 to num_epochs-1
         else:
             images, labels = Variable(images, labels)
         # Forward pass
-        outputs = resnet(images)
+        outputs = model(images)
         # Loss
         loss = loss_func(outputs, labels)
         test_running_loss += loss.data[0]
@@ -134,7 +136,7 @@ for epoch in range(num_epochs): # From 0 to num_epochs-1
     if val_acc > best_val_acc:
         best_val_acc = val_acc
         print 'Saving best model at epoch %d' % (epoch + 1)
-        torch.save(resnet.state_dict(), os.path.join(store_path, 'best_resnet.pkl'))
+        torch.save(model.state_dict(), os.path.join(store_path, 'best_model.pkl'))
 
 print 'Best validation accuracy is %f' % (best_val_acc)
 

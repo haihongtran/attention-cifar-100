@@ -1,3 +1,9 @@
+# Bytecode compiled python files
+*.pyc
+
+# Swap file
+*.swp
+
 # Trained model
 *.pkl
 

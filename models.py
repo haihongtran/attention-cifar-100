@@ -4,7 +4,7 @@ import math
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, attention='NoAttention'):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
@@ -16,6 +16,12 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
+        if attention == 'ChannelAttention':
+            self.attention = ChannelAttention(planes * 4)
+        elif attention == 'NoAttention':
+            self.attention = None
+        else:
+            raise Exception('Unknown attention type')
 
     def forward(self, x):
         residual = x
@@ -31,6 +37,9 @@ class Bottleneck(nn.Module):
         out = self.conv3(out)
         out = self.bn3(out)
 
+        if self.attention is not None:
+            out = self.attention(out)
+
         if self.downsample is not None:
             residual = self.downsample(x)
 
@@ -42,16 +51,16 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, attention, num_classes=100):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer1 = self._make_layer(block,  64, layers[0], stride=1, attention = attention)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, attention = attention)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, attention = attention)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(4, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
@@ -64,7 +73,7 @@ class ResNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1, attention='NoAttention'):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -74,10 +83,10 @@ class ResNet(nn.Module):
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
+        layers.append(block(self.inplanes, planes, stride, downsample, attention))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(self.inplanes, planes, attention = attention))
 
         return nn.Sequential(*layers)
 
@@ -97,9 +106,47 @@ class ResNet(nn.Module):
 
         return x
 
+class ChannelAttention(nn.Module):
+
+    def __init__(self, inplanes, reduction_ratio = 16):
+        super(ChannelAttention, self).__init__()
+        self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
+        self.fc = nn.Sequential(
+            nn.Linear(inplanes, inplanes // reduction_ratio),
+            nn.ReLU(),
+            nn.Linear(inplanes // reduction_ratio, inplanes),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        batch_size, num_channels, _, _ = x.size()
+        y = self.avgpool(x).view(batch_size, num_channels)
+        y = self.fc(y).view(batch_size, num_channels, 1, 1)
+        return x * y
+
+
 def resnet50(**kwargs):
     """
     Constructs a ResNet-50 model.
     """
-    model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
+    model = ResNet(Bottleneck, [3, 4, 6, 3], 'NoAttention', **kwargs)
     return model
+
+def resnet50_sa(**kwargs):
+    """
+    Constructs a ResNet-50 model with spatial attention.
+    """
+    pass
+
+def resnet50_ca(**kwargs):
+    """
+    Constructs a ResNet-50 model with channel attention.
+    """
+    model = ResNet(Bottleneck, [3, 4, 6, 3], 'ChannelAttention', **kwargs)
+    return model
+
+def resnet50_ja(**kwargs):
+    """
+    Constructs a ResNet-50 model with joint attention.
+    """
+    pass
