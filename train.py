@@ -69,7 +69,7 @@ def adjust_learning_rate(optimizer, lr):
     return lr_tmp
 
 # Create folder to store trained parameters
-store_path = 'trained_model'
+store_path = '../trained_model'
 if not os.path.exists(store_path):
     os.mkdir(store_path)
 
