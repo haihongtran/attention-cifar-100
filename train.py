@@ -40,7 +40,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
                                          shuffle=False, num_workers=4)
 
 # Define model for CIFAR-100
-model = resnet50_ca(num_classes = 100)
+model = resnet50_sa(num_classes = 100)
 
 # Get number of parameters
 print 'Number of parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -63,7 +63,7 @@ optimizer = optim.SGD(model.parameters(), lr = init_lr, momentum = 0.9, weight_d
 num_epochs = 200
 
 def adjust_learning_rate(optimizer, lr):
-    lr_tmp = lr * 0.1
+    lr_tmp = lr * 0.2
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr_tmp
     return lr_tmp
