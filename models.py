@@ -4,7 +4,7 @@ import math
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, attention='NoAttention'):
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
@@ -16,12 +16,6 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
-        if attention == 'ChannelAttention':
-            self.attention = ChannelAttention(planes * 4)
-        elif attention == 'NoAttention':
-            self.attention = None
-        else:
-            raise Exception('Unknown attention type')
 
     def forward(self, x):
         residual = x
@@ -36,9 +30,6 @@ class Bottleneck(nn.Module):
 
         out = self.conv3(out)
         out = self.bn3(out)
-
-        if self.attention is not None:
-            out = self.attention(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -58,12 +49,19 @@ class ResNet(nn.Module):
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(block,  64, layers[0], stride=1, attention = attention)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, attention = attention)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, attention = attention)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(4, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        self.attention = attention
+
+        if attention == "ChannelAttention":
+            self.attn1 = ChannelAttention(256)
+            self.attn2 = ChannelAttention(512)
+            self.attn3 = ChannelAttention(1024)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -73,7 +71,7 @@ class ResNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1, attention='NoAttention'):
+    def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -83,10 +81,10 @@ class ResNet(nn.Module):
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample, attention))
+        layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, attention = attention))
+            layers.append(block(self.inplanes, planes))
 
         return nn.Sequential(*layers)
 
@@ -96,8 +94,17 @@ class ResNet(nn.Module):
         x = self.relu(x)
 
         x = self.layer1(x)
+        if self.attention != "NoAttention":
+            x = self.attn1(x)
+
         x = self.layer2(x)
+        if self.attention != "NoAttention":
+            x = self.attn2(x)
+
         x = self.layer3(x)
+        if self.attention != "NoAttention":
+            x = self.attn3(x)
+
         x = self.layer4(x)
 
         x = self.avgpool(x)
