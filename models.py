@@ -44,16 +44,17 @@ class SpatialAttention(nn.Module):
 
     def __init__(self, inplanes):
         super(SpatialAttention, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
-        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
-        self.upspl = nn.Upsample(scale_factor=4)
-        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+        self.sa = nn.Sequential(
+            nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1), # 1x1 conv
+            nn.ReLU(True),
+            nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4), # 4x4 conv
+            nn.ReLU(True),
+            nn.Upsample(scale_factor=4),
+            nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+        )
 
     def forward(self, x):
-        xs = self.conv1(x)
-        xs = self.conv2(xs)
-        xs = self.upspl(xs)
-        xs = self.conv3(xs)
+        xs = self.sa(x)
         return x * xs
 
 class ChannelAttention(nn.Module):
