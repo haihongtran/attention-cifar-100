@@ -127,14 +127,14 @@ def train(args):
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             print 'SAVING BEST MODEL AT EPOCH %d' % (epoch + 1)
-            torch.save(model.state_dict(), os.path.join(store_path, 'best_model.pkl'))
+            torch.save(model.state_dict(), os.path.join(args.store_path, 'best_model.pkl'))
 
     print 'Best validation accuracy is %f' % (best_val_acc)
 
     # Save all losses value
     print 'Saving all loss values to files'
-    np.savetxt(os.path.join(store_path, 'epoch_train_loss_sum.txt'), np.array(epoch_train_loss_sum), fmt='%f')
-    np.savetxt(os.path.join(store_path, 'epoch_test_loss_sum.txt'), np.array(epoch_test_loss_sum), fmt='%f')
+    np.savetxt(os.path.join(args.store_path, 'epoch_train_loss_sum.txt'), np.array(epoch_train_loss_sum), fmt='%f')
+    np.savetxt(os.path.join(args.store_path, 'epoch_test_loss_sum.txt'), np.array(epoch_test_loss_sum), fmt='%f')
 
 
 if __name__ == '__main__':
