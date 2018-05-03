@@ -79,12 +79,16 @@ class JointAttention(nn.Module):
 
     def __init__(self, inplanes):
         super(JointAttention, self).__init__()
-        # Spatial Attention
-        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
-        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
-        self.upspl = nn.Upsample(scale_factor=4)
-        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
-        # Channel Attention
+        # Spatial Attention module
+        self.sa = nn.Sequential(
+            nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1), # 1x1 conv
+            nn.ReLU(True),
+            nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4), # 4x4 conv
+            nn.ReLU(True),
+            nn.Upsample(scale_factor=4),
+            nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+        )
+        # Channel Attention module
         self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
         self.fc = nn.Sequential(
             nn.Linear(inplanes, inplanes // 16),
@@ -94,13 +98,10 @@ class JointAttention(nn.Module):
         )
 
     def forward(self, x):
-        # Spatial Attention module
-        xs = self.conv1(x)
-        xs = self.conv2(xs)
-        xs = self.upspl(xs)
-        xs = self.conv3(xs)
+        # Spatial Attention
+        xs = self.sa(x)
 
-        # Channel Attention module
+        # Channel Attention
         batch_size, num_channels, _, _ = x.size()
         xc = self.avgpool(x).view(batch_size, num_channels)
         xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
