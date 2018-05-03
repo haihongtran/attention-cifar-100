@@ -40,6 +40,74 @@ class Bottleneck(nn.Module):
 
         return out
 
+class SpatialAttention(nn.Module):
+
+    def __init__(self, inplanes):
+        super(SpatialAttention, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
+        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
+        self.upspl = nn.Upsample(scale_factor=4)
+        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+
+    def forward(self, x):
+        xs = self.conv1(x)
+        xs = self.conv2(xs)
+        xs = self.upspl(xs)
+        xs = self.conv3(xs)
+        return x * xs
+
+class ChannelAttention(nn.Module):
+
+    def __init__(self, inplanes, reduction_ratio = 16):
+        super(ChannelAttention, self).__init__()
+        self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
+        self.fc = nn.Sequential(
+            nn.Linear(inplanes, inplanes // reduction_ratio),
+            nn.ReLU(),
+            nn.Linear(inplanes // reduction_ratio, inplanes),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        batch_size, num_channels, _, _ = x.size()
+        xc = self.avgpool(x).view(batch_size, num_channels)
+        xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
+        return x * xc
+
+class JointAttention(nn.Module):
+
+    def __init__(self, inplanes):
+        super(JointAttention, self).__init__()
+        # Spatial Attention
+        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
+        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
+        self.upspl = nn.Upsample(scale_factor=4)
+        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+        # Channel Attention
+        self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
+        self.fc = nn.Sequential(
+            nn.Linear(inplanes, inplanes // 16),
+            nn.ReLU(),
+            nn.Linear(inplanes // 16, inplanes),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # Spatial Attention module
+        xs = self.conv1(x)
+        xs = self.conv2(xs)
+        xs = self.upspl(xs)
+        xs = self.conv3(xs)
+
+        # Channel Attention module
+        batch_size, num_channels, _, _ = x.size()
+        xc = self.avgpool(x).view(batch_size, num_channels)
+        xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
+
+        # Joint Attention
+        xj = xs + xc
+
+        return x * xj + x
 
 class ResNet(nn.Module):
 
@@ -124,76 +192,6 @@ class ResNet(nn.Module):
 
         return x
 
-class SpatialAttention(nn.Module):
-
-    def __init__(self, inplanes):
-        super(SpatialAttention, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
-        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
-        self.upspl = nn.Upsample(scale_factor=4)
-        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
-
-    def forward(self, x):
-        xs = self.conv1(x)
-        xs = self.conv2(xs)
-        xs = self.upspl(xs)
-        xs = self.conv3(xs)
-        return x * xs
-
-class ChannelAttention(nn.Module):
-
-    def __init__(self, inplanes, reduction_ratio = 16):
-        super(ChannelAttention, self).__init__()
-        self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
-        self.fc = nn.Sequential(
-            nn.Linear(inplanes, inplanes // reduction_ratio),
-            nn.ReLU(),
-            nn.Linear(inplanes // reduction_ratio, inplanes),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        batch_size, num_channels, _, _ = x.size()
-        xc = self.avgpool(x).view(batch_size, num_channels)
-        xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
-        return x * xc
-
-class JointAttention(nn.Module):
-
-    def __init__(self, inplanes):
-        super(JointAttention, self).__init__()
-        # Spatial Attention
-        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
-        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
-        self.upspl = nn.Upsample(scale_factor=4)
-        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
-        # Channel Attention
-        self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
-        self.fc = nn.Sequential(
-            nn.Linear(inplanes, inplanes // 16),
-            nn.ReLU(),
-            nn.Linear(inplanes // 16, inplanes),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        # Spatial Attention module
-        xs = self.conv1(x)
-        xs = self.conv2(xs)
-        xs = self.upspl(xs)
-        xs = self.conv3(xs)
-
-        # Channel Attention module
-        batch_size, num_channels, _, _ = x.size()
-        xc = self.avgpool(x).view(batch_size, num_channels)
-        xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
-
-        # Joint Attention
-        xj = xs + xc
-
-        return x * xj + x
-
-
 def resnet50(**kwargs):
     """
     Constructs a ResNet-50 model.
@@ -221,3 +219,20 @@ def resnet50_ja(**kwargs):
     """
     model = ResNet(Bottleneck, [3, 4, 6, 3], 'JointAttention', **kwargs)
     return model
+
+def get_model(model):
+    if model == "resnet50":
+        print 'Using resnet50 model.'
+        return resnet50()
+    elif model == "resnet50_sa":
+        print 'Using resnet50 model with spatial attention.'
+        return resnet50_sa()
+    elif model == "resnet50_ca":
+        print 'Using resnet50 model with channel attention.'
+        return resnet50_ca()
+    elif model == "resnet50_ja":
+        print 'Using resnet50 model with joint attention.'
+        return resnet50_ja()
+    else:
+        raise Exception("Unknown model")
+

@@ -29,7 +29,7 @@ transform_train = transforms.Compose([
 train_set = torchvision.datasets.CIFAR100(root='./data', train=True,
                                         download=True, transform=transform_train)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                          shuffle=True, num_workers=4)
+                                          shuffle=True, num_workers=8)
 transform_val = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean_cifar_100, std_cifar_100)])
@@ -37,10 +37,10 @@ transform_val = transforms.Compose([
 val_set = torchvision.datasets.CIFAR100(root='./data', train=False,
                                        download=True, transform=transform_val)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
-                                         shuffle=False, num_workers=4)
+                                         shuffle=False, num_workers=8)
 
 # Define model for CIFAR-100
-model = resnet50_ja(num_classes = 100)
+model = get_model("resnet50")
 
 # Get number of parameters
 print 'Number of parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad)
