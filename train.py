@@ -18,6 +18,8 @@ def train(args):
     Main function to train the model
     """
 
+    print '\nLoading data'
+
     # Loading data
     mean_cifar_100 = (0.5071, 0.4865, 0.4409)
     std_cifar_100 = (0.2673, 0.2564, 0.2762)
@@ -42,7 +44,7 @@ def train(args):
                                             shuffle=False, num_workers=8)
 
     # Define model for CIFAR-100
-    model = get_model(args.arch)
+    model = get_model(args.architecture)
 
     # Get number of parameters
     print 'Number of parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -58,7 +60,7 @@ def train(args):
     else:
         loss_func = nn.CrossEntropyLoss()
 
-    optimizer = optim.SGD(model.parameters(), lr = args.lr, momentum = 0.9, weight_decay = args.weight_decay)
+    optimizer = optim.SGD(model.parameters(), lr = args.learning_rate, momentum = 0.9, weight_decay = args.weight_decay)
 
     # Create folder to store trained parameters
     if not os.path.exists(args.store_path):
@@ -66,7 +68,7 @@ def train(args):
 
     epoch_train_loss_sum = []
     epoch_test_loss_sum = []
-    lr_curr = args.lr
+    lr_curr = args.learning_rate
     best_val_acc = -1
 
     for epoch in range(args.n_epochs):
@@ -137,15 +139,15 @@ def train(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Hyperparams')
-    parser.add_argument('--arch', type=str, default='resnet50',
+    parser.add_argument('--architecture', type=str, default='resnet50',
                          help='Architecture to use')
     parser.add_argument('--n_epochs', type=int, default=200,
                          help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=128,
                          help='Batch size')
-    parser.add_argument('--lr', type=float, default=0.1,
+    parser.add_argument('--learning_rate', type=float, default=0.1,
                          help='Learning rate')
-    parser.add_argument('--lr_decay', type=float, default=0.1,
+    parser.add_argument('--lr_decay', type=float, default=0.2,
                          help='Learning rate decay ratio')
     parser.add_argument('--schedule', type=int, nargs='+', default=[60, 120, 160],
                          help='Scheduled epoch to decrease learning rate')
@@ -155,4 +157,9 @@ if __name__ == '__main__':
                          help='Weight decay param used in loss function')
 
     args = parser.parse_args()
+
+    print 'Hyperparameters:'
+    for arg in vars(args):
+        print '\t%s:\t%s' %(arg, str(getattr(args, arg)))
+
     train(args)
