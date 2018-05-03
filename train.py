@@ -60,7 +60,7 @@ def train(args):
     else:
         loss_func = nn.CrossEntropyLoss()
 
-    optimizer = optim.SGD(model.parameters(), lr = args.learning_rate, momentum = 0.9, weight_decay = args.weight_decay)
+    optimizer = optim.SGD(model.parameters(), lr = args.initial_lr, momentum = 0.9, weight_decay = args.weight_decay)
 
     # Create folder to store trained parameters
     if not os.path.exists(args.store_path):
@@ -68,7 +68,7 @@ def train(args):
 
     epoch_train_loss_sum = []
     epoch_test_loss_sum = []
-    lr_curr = args.learning_rate
+    lr_curr = args.initial_lr
     best_val_acc = -1
 
     for epoch in range(args.n_epochs):
@@ -145,7 +145,7 @@ if __name__ == '__main__':
                          help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=128,
                          help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=0.1,
+    parser.add_argument('--initial_lr', type=float, default=0.1,
                          help='Learning rate')
     parser.add_argument('--lr_decay', type=float, default=0.2,
                          help='Learning rate decay ratio')
@@ -160,6 +160,6 @@ if __name__ == '__main__':
 
     print 'Hyperparameters:'
     for arg in vars(args):
-        print '\t%s:\t%s' %(arg, str(getattr(args, arg)))
+        print '\t%s:\t%s' %(arg, getattr(args, arg))
 
     train(args)
