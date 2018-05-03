@@ -50,7 +50,8 @@ class SpatialAttention(nn.Module):
             nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4), # 4x4 conv
             nn.ReLU(True),
             nn.Upsample(scale_factor=4),
-            nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+            nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1), # 1x1 conv
+            nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -93,9 +94,9 @@ class JointAttention(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(inplanes, inplanes // 16),
             nn.ReLU(),
-            nn.Linear(inplanes // 16, inplanes),
-            nn.Sigmoid()
+            nn.Linear(inplanes // 16, inplanes)
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # Spatial Attention
@@ -107,7 +108,7 @@ class JointAttention(nn.Module):
         xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
 
         # Joint Attention
-        xj = xs + xc
+        xj = self.sigmoid(xs + xc)
 
         return x * xj + x
 
