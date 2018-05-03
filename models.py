@@ -67,6 +67,12 @@ class ResNet(nn.Module):
             self.attn1 = SpatialAttention(256)
             self.attn2 = SpatialAttention(512)
             self.attn3 = SpatialAttention(1024)
+        elif attention == "JointAttention":
+            self.attn1 = JointAttention(256)
+            self.attn2 = JointAttention(512)
+            self.attn3 = JointAttention(1024)
+        elif attention != "NoAttention":
+            raise Exception('Unknown attention type')
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -148,9 +154,44 @@ class ChannelAttention(nn.Module):
 
     def forward(self, x):
         batch_size, num_channels, _, _ = x.size()
-        y = self.avgpool(x).view(batch_size, num_channels)
-        y = self.fc(y).view(batch_size, num_channels, 1, 1)
-        return x * y
+        xc = self.avgpool(x).view(batch_size, num_channels)
+        xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
+        return x * xc
+
+class JointAttention(nn.Module):
+
+    def __init__(self, inplanes):
+        super(JointAttention, self).__init__()
+        # Spatial Attention
+        self.conv1 = nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1)  # 1x1 conv
+        self.conv2 = nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4)  # 4x4 conv
+        self.upspl = nn.Upsample(scale_factor=4)
+        self.conv3 = nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+        # Channel Attention
+        self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
+        self.fc = nn.Sequential(
+            nn.Linear(inplanes, inplanes // 16),
+            nn.ReLU(),
+            nn.Linear(inplanes // 16, inplanes),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # Spatial Attention module
+        xs = self.conv1(x)
+        xs = self.conv2(xs)
+        xs = self.upspl(xs)
+        xs = self.conv3(xs)
+
+        # Channel Attention module
+        batch_size, num_channels, _, _ = x.size()
+        xc = self.avgpool(x).view(batch_size, num_channels)
+        xc = self.fc(xc).view(batch_size, num_channels, 1, 1)
+
+        # Joint Attention
+        xj = xs + xc
+
+        return x * xj + x
 
 
 def resnet50(**kwargs):
@@ -178,4 +219,5 @@ def resnet50_ja(**kwargs):
     """
     Constructs a ResNet-50 model with joint attention.
     """
-    pass
+    model = ResNet(Bottleneck, [3, 4, 6, 3], 'JointAttention', **kwargs)
+    return model

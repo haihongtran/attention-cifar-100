@@ -40,7 +40,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size,
                                          shuffle=False, num_workers=4)
 
 # Define model for CIFAR-100
-model = resnet50_sa(num_classes = 100)
+model = resnet50_ja(num_classes = 100)
 
 # Get number of parameters
 print 'Number of parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad)
