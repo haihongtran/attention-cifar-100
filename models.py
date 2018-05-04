@@ -5,7 +5,7 @@ import math
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, attention="NoAttention"):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
@@ -17,6 +17,16 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
+        if attention == "SpatialAttention":
+            self.attention = SpatialAttention(planes * 4)
+        elif attention == "ChannelAttention":
+            self.attention = ChannelAttention(planes * 4)
+        elif attention == "JointAttention":
+            self.attention = JointAttention(planes * 4)
+        elif attention == "NoAttention":
+            self.attention = None
+        else:
+            raise Exception("Unknown attention received in Bottleneck")
 
     def forward(self, x):
         residual = x
@@ -32,6 +42,9 @@ class Bottleneck(nn.Module):
         out = self.conv3(out)
         out = self.bn3(out)
 
+        if self.attention is not None:
+            out = self.attention(out)
+
         if self.downsample is not None:
             residual = self.downsample(x)
 
@@ -45,12 +58,11 @@ class SpatialAttention(nn.Module):
     def __init__(self, inplanes):
         super(SpatialAttention, self).__init__()
         self.sa = nn.Sequential(
-            nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1), # 1x1 conv
+            nn.Conv2d(inplanes, inplanes // 16, 1, bias=True),
             nn.ReLU(True),
-            nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4), # 4x4 conv
+            nn.Conv2d(inplanes // 16, inplanes // 16, 1, bias=True),
             nn.ReLU(True),
-            nn.Upsample(scale_factor=4),
-            nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1), # 1x1 conv
+            nn.Conv2d(inplanes // 16, 1, 1, bias=True),
             nn.Sigmoid()
         )
 
@@ -82,12 +94,11 @@ class JointAttention(nn.Module):
         super(JointAttention, self).__init__()
         # Spatial Attention module
         self.sa = nn.Sequential(
-            nn.Conv2d(inplanes, inplanes // 16, kernel_size=1, stride=1), # 1x1 conv
+            nn.Conv2d(inplanes, inplanes // 16, 1, bias=True),
             nn.ReLU(True),
-            nn.Conv2d(inplanes // 16, inplanes // 16, kernel_size=4, stride=4), # 4x4 conv
+            nn.Conv2d(inplanes // 16, inplanes // 16, 1, bias=True),
             nn.ReLU(True),
-            nn.Upsample(scale_factor=4),
-            nn.Conv2d(inplanes // 16, 1, kernel_size=1, stride=1)  # 1x1 conv
+            nn.Conv2d(inplanes // 16, 1, 1, bias=True),
         )
         # Channel Attention module
         self.avgpool = nn.AdaptiveAvgPool2d(1)  # Output size of 1x1xC
@@ -121,29 +132,12 @@ class ResNet(nn.Module):
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer1 = self._make_layer(block,  64, layers[0], stride=1, attention=attention)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, attention=attention)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, attention=attention)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(4, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-
-        self.attention = attention
-
-        if attention == "ChannelAttention":
-            self.attn1 = ChannelAttention(256)
-            self.attn2 = ChannelAttention(512)
-            self.attn3 = ChannelAttention(1024)
-        elif attention == "SpatialAttention":
-            self.attn1 = SpatialAttention(256)
-            self.attn2 = SpatialAttention(512)
-            self.attn3 = SpatialAttention(1024)
-        elif attention == "JointAttention":
-            self.attn1 = JointAttention(256)
-            self.attn2 = JointAttention(512)
-            self.attn3 = JointAttention(1024)
-        elif attention != "NoAttention":
-            raise Exception('Unknown attention type')
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -153,7 +147,7 @@ class ResNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1, attention="NoAttention"):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -165,8 +159,10 @@ class ResNet(nn.Module):
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
+        for i in range(1, blocks - 1):
             layers.append(block(self.inplanes, planes))
+        # Attach attention module to the last block
+        layers.append(block(self.inplanes, planes, attention=attention))
 
         return nn.Sequential(*layers)
 
@@ -176,17 +172,8 @@ class ResNet(nn.Module):
         x = self.relu(x)
 
         x = self.layer1(x)
-        if self.attention != "NoAttention":
-            x = self.attn1(x)
-
         x = self.layer2(x)
-        if self.attention != "NoAttention":
-            x = self.attn2(x)
-
         x = self.layer3(x)
-        if self.attention != "NoAttention":
-            x = self.attn3(x)
-
         x = self.layer4(x)
 
         x = self.avgpool(x)
